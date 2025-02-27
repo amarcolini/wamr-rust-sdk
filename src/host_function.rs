@@ -2,10 +2,11 @@
  * Copyright (C) 2019 Intel Corporation. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  */
-
+use alloc::ffi::CString;
+use alloc::vec::Vec;
 /// This is a wrapper of a host defined(Rust) function.
-use std::ffi::{c_void, CString};
-use std::ptr;
+use core::ffi::{c_void};
+use core::ptr;
 
 use wamr_sys::NativeSymbol;
 

@@ -141,9 +141,13 @@
 //! ```
 //!
 
-use std::error;
-use std::fmt;
-use std::io;
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
+
+extern crate alloc;
+
+use core::error;
+use alloc::fmt;
+use alloc::string::String;
 pub use wamr_sys as sys;
 
 pub mod function;
@@ -168,6 +172,7 @@ pub enum RuntimeError {
     /// Runtime initialization error.
     InitializationFailure,
     /// file operation error. usually while loading(compilation) a .wasm
+    #[cfg(feature = "std")]
     WasmFileFSError(std::io::Error),
     /// A compilation error. usually means that the .wasm file is invalid
     CompilationError(String),
@@ -184,6 +189,7 @@ impl fmt::Display for RuntimeError {
         match self {
             RuntimeError::NotImplemented => write!(f, "Not implemented"),
             RuntimeError::InitializationFailure => write!(f, "Runtime initialization failure"),
+            #[cfg(feature = "std")]
             RuntimeError::WasmFileFSError(e) => write!(f, "Wasm file operation error: {}", e),
             RuntimeError::CompilationError(e) => write!(f, "Wasm compilation error: {}", e),
             RuntimeError::InstantiationFailure(e) => write!(f, "Wasm instantiation failure: {}", e),
@@ -200,14 +206,16 @@ impl fmt::Display for RuntimeError {
 impl error::Error for RuntimeError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
+            #[cfg(feature = "std")]
             RuntimeError::WasmFileFSError(e) => Some(e),
             _ => None,
         }
     }
 }
 
-impl From<io::Error> for RuntimeError {
-    fn from(e: io::Error) -> Self {
+#[cfg(feature = "std")]
+impl From<std::io::Error> for RuntimeError {
+    fn from(e: std::io::Error) -> Self {
         RuntimeError::WasmFileFSError(e)
     }
 }

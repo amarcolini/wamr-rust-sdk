@@ -6,20 +6,15 @@
 //! .wasm compiled, in-memory representation
 //! get one via `Module::from_file()` or `Module::from_buf()`
 
+use alloc::ffi::CString;
+use alloc::string::String;
+use alloc::vec::Vec;
 use crate::{
     helper::error_buf_to_string, helper::DEFAULT_ERROR_BUF_SIZE, runtime::Runtime,
     wasi_context::WasiCtx, RuntimeError,
 };
 use core::marker::PhantomData;
-use std::{
-    ffi::{c_char, CString},
-    fs::File,
-    io::Read,
-    path::Path,
-    ptr,
-    string::String,
-    vec::Vec,
-};
+use core::{ffi::c_char, ptr};
 use wamr_sys::{
     wasm_module_t, wasm_runtime_load, wasm_runtime_set_module_name,
     wasm_runtime_set_wasi_addr_pool, wasm_runtime_set_wasi_args,
@@ -44,9 +39,12 @@ impl<'runtime> Module<'runtime> {
     ///
     /// If the file does not exist or the file cannot be read, an `RuntimeError::WasmFileFSError` will be returned.
     /// If the wasm file is not a valid wasm file, an `RuntimeError::CompilationError` will be returned.
-    pub fn from_file(runtime: &'runtime Runtime, wasm_file: &Path) -> Result<Self, RuntimeError> {
+    #[cfg(any(feature = "std", test))]
+    pub fn from_file(runtime: &'runtime Runtime, wasm_file: &std::path::Path) -> Result<Self, RuntimeError> {
+        use std::io::Read;
+
         let name = wasm_file.file_name().unwrap().to_str().unwrap();
-        let mut wasm_file = File::open(wasm_file)?;
+        let mut wasm_file = std::fs::File::open(wasm_file)?;
 
         let mut binary: Vec<u8> = Vec::new();
         wasm_file.read_to_end(&mut binary)?;
@@ -212,7 +210,7 @@ mod tests {
 
         let runtime = runtime.unwrap();
 
-        let module = Module::from_file(&runtime, Path::new("not_exist"));
+        let module = Module::from_file(&runtime, std::path::Path::new("not_exist"));
         assert!(module.is_err());
     }
 

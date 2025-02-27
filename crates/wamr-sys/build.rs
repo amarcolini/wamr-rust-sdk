@@ -124,14 +124,14 @@ fn setup_config(
 
     let mut cfg = Config::new(wamr_root);
     cfg.define("WAMR_BUILD_AOT", "1")
-        .define("WAMR_BUILD_INTERP", "1")
-        .define("WAMR_BUILD_FAST_INTERP", "1")
+        .define("WAMR_BUILD_INTERP", "0")
+        .define("WAMR_BUILD_FAST_INTERP", "0")
         .define("WAMR_BUILD_JIT", &enable_llvm_jit)
         .define("WAMR_BUILD_BULK_MEMORY", "1")
         .define("WAMR_BUILD_REF_TYPES", "1")
         .define("WAMR_BUILD_SIMD", "1")
-        .define("WAMR_BUILD_LIBC_WASI", "1")
-        .define("WAMR_BUILD_LIBC_BUILTIN", "0")
+        .define("WAMR_BUILD_LIBC_WASI", "0")
+        .define("WAMR_BUILD_LIBC_BUILTIN", "1")
         .define("WAMR_DISABLE_HW_BOUND_CHECK", &disalbe_hw_bound_check)
         .define("WAMR_BUILD_MULTI_MODULE", &enable_multi_module)
         .define("WAMR_BUILD_DUMP_CALL_STACK", &enable_dump_call_stack)
@@ -162,6 +162,17 @@ fn setup_config(
         cfg.define("WAMR_BH_VPRINTF", &bh_vprintf);
     }
 
+    if let Ok(arm_toolchain) = env::var("GCC_ARM_TOOLCHAIN") {
+        cfg.define("GCC_ARM_TOOLCHAIN", &arm_toolchain);
+    }
+
+    if env::var("CARGO_CFG_TARGET_VENDOR").as_deref() == Ok("vex") {
+        cfg.target("armv7a-none-eabi");
+        cfg.build_target("wamr");
+    } else {
+        cfg.build_target("vmlib");
+    }
+
     cfg
 }
 
@@ -171,10 +182,15 @@ fn build_wamr_libraries(wamr_root: &PathBuf) {
 
     let feature_flags = get_feature_flags();
     let mut cfg = setup_config(wamr_root, feature_flags);
-    let dst = cfg.out_dir(vmbuild_path).build_target("iwasm_static").build();
+    let dst = cfg.out_dir(vmbuild_path).build();
 
     println!("cargo:rustc-link-search=native={}/build", dst.display());
-    println!("cargo:rustc-link-lib=static=vmlib");
+
+    if env::var("CARGO_CFG_TARGET_VENDOR").as_deref() == Ok("vex") {
+        println!("cargo:rustc-link-lib=static=wamr");
+    } else {
+        println!("cargo:rustc-link-lib=static=iwasm");
+    }
 }
 
 fn build_wamrc(wamr_root: &Path) {
@@ -184,11 +200,16 @@ fn build_wamrc(wamr_root: &Path) {
     let wamr_compiler_path = wamr_root.join("wamr-compiler");
     assert!(wamr_compiler_path.exists());
 
-    Config::new(&wamr_compiler_path)
-        .out_dir(wamrc_build_path)
+    let mut cfg = Config::new(&wamr_compiler_path);
+    cfg.out_dir(wamrc_build_path)
         .define("WAMR_BUILD_WITH_CUSTOM_LLVM", "1")
-        .define("LLVM_DIR", env::var("LLVM_LIB_CFG_PATH").expect("LLVM_LIB_CFG_PATH isn't specified in config.toml"))
-        .build();
+        .define("LLVM_DIR", env::var("LLVM_LIB_CFG_PATH").expect("LLVM_LIB_CFG_PATH isn't specified in config.toml"));
+
+    if let Ok(host) = env::var("HOST") {
+        cfg.target(&host);
+    }
+
+    cfg.build();
 }
 
 fn generate_bindings(wamr_root: &Path) {
@@ -217,14 +238,20 @@ fn main() {
     println!("cargo:rerun-if-env-changed=WAMR_BH_VPRINTF");
 
     let wamr_root = env::current_dir().unwrap();
-    let wamr_root = wamr_root.join("wasm-micro-runtime");
+    let mut wamr_root = wamr_root.join("wasm-micro-runtime");
     assert!(wamr_root.exists());
 
     if !check_is_espidf() {
         // because the ESP-IDF build procedure differs from the regular one
         // (build internally by esp-idf-sys),
-        build_wamr_libraries(&wamr_root);
-        build_wamrc(&wamr_root);
+
+        let mut product_root = wamr_root.clone();
+        if env::var("CARGO_CFG_TARGET_VENDOR").as_deref() == Ok("vex") {
+            product_root.push("product-mini/platforms/vexos");
+        }
+
+        build_wamr_libraries(&product_root);
+        // build_wamrc(&wamr_root);
     }
 
     generate_bindings(&wamr_root);
