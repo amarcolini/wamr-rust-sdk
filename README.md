@@ -1,5 +1,30 @@
 # wamr-rust-sdk
 
+## VEX V5 Support
+
+Environment variables to set:
+
+```sh
+export CMAKE_GENERATOR=Ninja
+export CC=clang
+export CXX=clang++
+# Change based on operating system - path to ARM Embedded Toolchain.
+# The directory should include `bin/`, `lib/`, `arm-none-eabi/`, etc.
+export GCC_ARM_TOOLCHAIN="/opt/homebrew/opt/arm-gcc-bin@14"
+# export GCC_ARM_TOOLCHAIN="C:\\Program Files (x86)\\Arm GNU Toolchain arm-none-eabi\\13.3 rel1"
+```
+
+Build without default features:
+
+```sh
+cargo v5 build --no-default-features
+```
+
+Or add to Cargo.toml:
+```toml
+wamr-rust-sdk = { git = "https://github.com/doinkythederp/wamr-rust-sdk/repo.git", branch = "feat/vexos-target", default-features = false }
+```
+
 ## WAMR Rust SDK
 
 ### Overview
