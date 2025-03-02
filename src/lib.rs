@@ -157,11 +157,13 @@ pub mod instance;
 pub mod module;
 pub mod runtime;
 pub mod value;
+#[cfg(feature = "wasi")]
 pub mod wasi_context;
 
 #[derive(Debug)]
 pub struct ExecError {
     pub message: String,
+    #[cfg(feature = "wasi")]
     pub exit_code: u32,
 }
 
@@ -193,6 +195,13 @@ impl fmt::Display for RuntimeError {
             RuntimeError::WasmFileFSError(e) => write!(f, "Wasm file operation error: {}", e),
             RuntimeError::CompilationError(e) => write!(f, "Wasm compilation error: {}", e),
             RuntimeError::InstantiationFailure(e) => write!(f, "Wasm instantiation failure: {}", e),
+            #[cfg(not(feature = "wasi"))]
+            RuntimeError::ExecutionError(info) => write!(
+                f,
+                "Wasm execution error: {}",
+                info.message,
+            ),
+            #[cfg(feature = "wasi")]
             RuntimeError::ExecutionError(info) => write!(
                 f,
                 "Wasm execution error: {} and {}",

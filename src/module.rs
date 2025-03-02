@@ -11,7 +11,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use crate::{
     helper::error_buf_to_string, helper::DEFAULT_ERROR_BUF_SIZE, runtime::Runtime,
-    wasi_context::WasiCtx, RuntimeError,
+    RuntimeError,
 };
 use core::marker::PhantomData;
 use core::{ffi::c_char, ptr};
@@ -28,7 +28,8 @@ pub struct Module<'runtime> {
     module: wasm_module_t,
     // to keep the module content in memory
     content: Vec<u8>,
-    wasi_ctx: WasiCtx,
+    #[cfg(feature = "wasi")]
+    wasi_ctx: crate::wasi_context::WasiCtx,
     _phantom: PhantomData<&'runtime Runtime>,
 }
 
@@ -106,6 +107,7 @@ impl<'runtime> Module<'runtime> {
             name: String::from(name),
             module,
             content,
+            #[cfg(feature = "wasi")]
             wasi_ctx: WasiCtx::default(),
             _phantom: PhantomData,
         })
@@ -114,6 +116,7 @@ impl<'runtime> Module<'runtime> {
     /// set Wasi context for a module
     ///
     /// This function should be called before `Instance::new`
+    #[cfg(feature = "wasi")]
     pub fn set_wasi_context(&mut self, wasi_ctx: WasiCtx) {
         self.wasi_ctx = wasi_ctx;
 
