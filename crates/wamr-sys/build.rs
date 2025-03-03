@@ -216,12 +216,17 @@ fn generate_bindings(wamr_root: &Path) {
     let wamr_header = wamr_root.join("core/iwasm/include/wasm_export.h");
     assert!(wamr_header.exists());
 
-    let bindings = bindgen::Builder::default()
+    let mut opts = bindgen::Builder::default()
         .ctypes_prefix("::core::ffi")
         .use_core()
         .header(wamr_header.into_os_string().into_string().unwrap())
-        .derive_default(true)
-        .generate()
+        .derive_default(true);
+
+    if let Ok(sysroot) = env::var("GCC_ARM_TOOLCHAIN") {
+        opts = opts.clang_arg(format!("--sysroot={}", sysroot));
+    }
+
+    let bindings  = opts.generate()
         .expect("Unable to generate bindings");
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
