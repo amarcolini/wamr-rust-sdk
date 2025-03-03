@@ -8,7 +8,9 @@ use alloc::vec::Vec;
 use core::ffi::{c_void};
 use core::ptr;
 
-use wamr_sys::NativeSymbol;
+use wamr_sys::{wasm_exec_env_t, wasm_runtime_get_module_inst, NativeSymbol};
+use crate::instance::InstanceRef;
+use crate::InstanceContext;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -60,6 +62,18 @@ pub fn pack_host_function(function_name: &CString, function_ptr: *mut c_void) ->
         func_ptr: function_ptr,
         signature: ptr::null(),
         attachment: ptr::null_mut(),
+    }
+}
+
+/// The first parameter of any host function.
+#[repr(transparent)]
+pub struct ExecEnvironment {
+    inner: wasm_exec_env_t,
+}
+
+unsafe impl InstanceContext for ExecEnvironment {
+    fn as_instance_ref(&self) -> InstanceRef {
+        unsafe { InstanceRef::from_raw(wasm_runtime_get_module_inst(self.inner)) }
     }
 }
 

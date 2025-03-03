@@ -149,6 +149,8 @@ use core::error;
 use alloc::fmt;
 use alloc::string::String;
 pub use wamr_sys as sys;
+use wamr_sys::{wasm_memory_get_base_address, wasm_memory_inst_t, wasm_module_inst_t, wasm_runtime_get_app_addr_range, wasm_runtime_get_default_memory, wasm_runtime_validate_app_addr};
+use crate::instance::InstanceRef;
 
 pub mod function;
 mod helper;
@@ -159,6 +161,27 @@ pub mod runtime;
 pub mod value;
 #[cfg(feature = "wasi")]
 pub mod wasi_context;
+
+/// # Safety
+/// 
+/// Types implementing this trait must have exclusive access to their instance's memory.
+pub unsafe trait InstanceContext {
+    fn as_instance_ref(&self) -> InstanceRef;
+    
+    fn as_raw(&self) -> wasm_module_inst_t {
+        self.as_instance_ref().instance
+    }
+    
+    fn memory(&self) -> &[u8] {
+        let (base, size) = self.as_instance_ref().get_memory_range();
+        unsafe { core::slice::from_raw_parts(base.cast(), size) }
+    }
+    
+    fn memory_mut(&mut self) -> &mut [u8] {
+        let (base, size) = self.as_instance_ref().get_memory_range();
+        unsafe { core::slice::from_raw_parts_mut(base.cast(), size) }
+    }
+}
 
 #[derive(Debug)]
 pub struct ExecError {

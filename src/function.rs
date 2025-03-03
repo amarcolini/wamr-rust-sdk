@@ -21,33 +21,29 @@ use wamr_sys::{
     wasm_valkind_enum_WASM_V128,
 };
 
-use crate::{
-    helper::exception_to_string, instance::Instance, value::WasmValue, ExecError, RuntimeError,
-};
+use crate::{helper::exception_to_string, instance::Instance, value::WasmValue, InstanceContext, ExecError, RuntimeError};
 
-pub struct Function<'instance> {
+pub struct Function {
     function: wasm_function_inst_t,
-    _phantom: PhantomData<Instance<'instance>>,
 }
 
-impl<'instance> Function<'instance> {
+impl Function {
     /// find a function by name
     ///
     /// # Error
     ///
     /// Return `RuntimeError::FunctionNotFound` if failed.
     pub fn find_export_func(
-        instance: &'instance Instance<'instance>,
+        instance: &impl InstanceContext,
         name: &str,
     ) -> Result<Self, RuntimeError> {
         let name = CString::new(name).expect("CString::new failed");
         let function =
-            unsafe { wasm_runtime_lookup_function(instance.get_inner_instance(), name.as_ptr()) };
+            unsafe { wasm_runtime_lookup_function(instance.as_raw(), name.as_ptr()) };
         match function.is_null() {
             true => Err(RuntimeError::FunctionNotFound),
             false => Ok(Function {
                 function,
-                _phantom: PhantomData,
             }),
         }
     }
@@ -56,11 +52,11 @@ impl<'instance> Function<'instance> {
     #[allow(non_snake_case)]
     fn parse_result(
         &self,
-        instance: &Instance<'instance>,
+        instance: &impl InstanceContext,
         result: Vec<u32>,
     ) -> Result<Vec<WasmValue>, RuntimeError> {
         let result_count =
-            unsafe { wasm_func_get_result_count(self.function, instance.get_inner_instance()) };
+            unsafe { wasm_func_get_result_count(self.function, instance.as_raw()) };
         if result_count == 0 {
             return Ok(vec![WasmValue::Void]);
         }
@@ -69,7 +65,7 @@ impl<'instance> Function<'instance> {
         unsafe {
             wasm_func_get_result_types(
                 self.function,
-                instance.get_inner_instance(),
+                instance.as_raw(),
                 result_types.as_mut_ptr(),
             );
         }
@@ -117,11 +113,11 @@ impl<'instance> Function<'instance> {
     #[allow(non_upper_case_globals)]
     pub fn call(
         &self,
-        instance: &'instance Instance<'instance>,
+        instance: &mut impl InstanceContext,
         params: &Vec<WasmValue>,
     ) -> Result<Vec<WasmValue>, RuntimeError> {
         let param_count =
-            unsafe { wasm_func_get_param_count(self.function, instance.get_inner_instance()) };
+            unsafe { wasm_func_get_param_count(self.function, instance.as_raw()) };
         if param_count > params.len() as u32 {
             return Err(RuntimeError::ExecutionError(ExecError {
                 message: "invalid parameters".to_string(),
@@ -132,7 +128,7 @@ impl<'instance> Function<'instance> {
 
         // Maintain sufficient allocated space in the vector rather than just declaring its capacity.
         let result_count =
-            unsafe { wasm_func_get_result_count(self.function, instance.get_inner_instance()) };
+            unsafe { wasm_func_get_result_count(self.function, instance.as_raw()) };
         let capacity = core::cmp::max(param_count, result_count) as usize * 4;
 
         // Populate the parameters in the sufficiently allocated argv vector
@@ -145,18 +141,18 @@ impl<'instance> Function<'instance> {
         let call_result: bool;
         unsafe {
             let exec_env: wasm_exec_env_t =
-                wasm_runtime_get_exec_env_singleton(instance.get_inner_instance());
+                wasm_runtime_get_exec_env_singleton(instance.as_raw());
             call_result =
                 wasm_runtime_call_wasm(exec_env, self.function, param_count, argv.as_mut_ptr());
         };
 
         if !call_result {
             unsafe {
-                let exception_c = wasm_runtime_get_exception(instance.get_inner_instance());
+                let exception_c = wasm_runtime_get_exception(instance.as_raw());
                 let error_info = ExecError {
                     message: exception_to_string(exception_c),
                     #[cfg(feature = "wasi")]
-                    exit_code: wamr_sys::wasm_runtime_get_wasi_exit_code(instance.get_inner_instance()),
+                    exit_code: wamr_sys::wasm_runtime_get_wasi_exit_code(instance.as_raw()),
                 };
                 return Err(RuntimeError::ExecutionError(error_info));
             }

@@ -9,17 +9,11 @@
 #![allow(unused_variables)]
 
 use alloc::string::String;
-use core::{ffi::c_char, marker::PhantomData};
+use core::{ffi::c_char, marker::PhantomData, ptr};
+use core::ffi::c_void;
+use wamr_sys::{wasm_memory_get_base_address, wasm_module_inst_t, wasm_runtime_deinstantiate, wasm_runtime_destroy_thread_env, wasm_runtime_get_app_addr_range, wasm_runtime_get_default_memory, wasm_runtime_get_native_addr_range, wasm_runtime_init_thread_env, wasm_runtime_instantiate};
 
-use wamr_sys::{
-    wasm_module_inst_t, wasm_runtime_deinstantiate, wasm_runtime_destroy_thread_env,
-    wasm_runtime_init_thread_env, wasm_runtime_instantiate,
-};
-
-use crate::{
-    helper::error_buf_to_string, helper::DEFAULT_ERROR_BUF_SIZE, module::Module, runtime::Runtime,
-    RuntimeError,
-};
+use crate::{helper::error_buf_to_string, helper::DEFAULT_ERROR_BUF_SIZE, module::Module, runtime::Runtime, InstanceContext, RuntimeError};
 
 #[derive(Debug)]
 pub struct Instance<'module> {
@@ -104,6 +98,38 @@ impl Drop for Instance<'_> {
             wasm_runtime_destroy_thread_env();
             wasm_runtime_deinstantiate(self.instance);
         }
+    }
+}
+
+pub(crate) struct InstanceRef<'a> {
+    pub instance: wasm_module_inst_t,
+    lifetime: PhantomData<&'a ()>,
+}
+
+impl<'a> InstanceRef<'a> {
+    pub unsafe fn from_raw(instance: wasm_module_inst_t) -> Self {
+        Self {
+            instance,
+            lifetime: PhantomData,
+        }
+    }
+
+    /// Gets the base address and size of this instance's memory
+    pub fn get_memory_range(&self) -> (*mut c_void, usize) {
+        unsafe {
+            let memory = wasm_runtime_get_default_memory(self.instance);
+            assert!(!memory.is_null());
+            let base_addr = wasm_memory_get_base_address(memory);
+            let mut mem_size = 0;
+            wasm_runtime_get_app_addr_range(self.instance, 0, ptr::null_mut(), &mut mem_size);
+            (base_addr, mem_size as usize)
+        }
+    }
+}
+
+unsafe impl InstanceContext for Instance<'_> {
+    fn as_instance_ref(&self) -> InstanceRef {
+        unsafe { InstanceRef::from_raw(self.instance) }
     }
 }
 
