@@ -6,6 +6,7 @@
 //! .wasm compiled, in-memory representation
 //! get one via `Module::from_file()` or `Module::from_buf()`
 
+use alloc::borrow::Cow;
 use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -15,11 +16,36 @@ use crate::{
 };
 use core::marker::PhantomData;
 use core::{ffi::c_char, ptr};
+use core::fmt::{Debug, Formatter};
 use wamr_sys::{
     wasm_module_t, wasm_runtime_load, wasm_runtime_set_module_name,
     wasm_runtime_set_wasi_addr_pool, wasm_runtime_set_wasi_args,
     wasm_runtime_set_wasi_ns_lookup_pool, wasm_runtime_unload,
 };
+
+enum Content {
+    Owned(Vec<u8>),
+    Borrowed(&'static mut [u8]),
+}
+
+impl Debug for Content {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        if matches!(self, Content::Owned(..)) {
+            write!(f, "Owned")
+        } else {
+            write!(f, "Borrowed")
+        }
+    }
+}
+
+impl AsMut<[u8]> for Content {
+    fn as_mut(&mut self) -> &mut [u8] {
+        match self {
+            Content::Owned(v) => v.as_mut(),
+            Content::Borrowed(v) => v,
+        }
+    }
+}
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -27,7 +53,7 @@ pub struct Module<'runtime> {
     name: String,
     module: wasm_module_t,
     // to keep the module content in memory
-    content: Vec<u8>,
+    content: Content,
     #[cfg(feature = "wasi")]
     wasi_ctx: crate::wasi_context::WasiCtx,
     _phantom: PhantomData<&'runtime Runtime>,
@@ -53,22 +79,46 @@ impl<'runtime> Module<'runtime> {
         Self::from_vec(runtime, binary, name)
     }
 
+    pub fn from_vec(
+        runtime: &'runtime Runtime,
+        binary: Vec<u8>,
+        name: &str,
+    ) -> Result<Self, RuntimeError> {
+        Self::from_content(
+            runtime,
+            Content::Owned(binary),
+            name,
+        )
+    }
+
+    pub fn from_mut_slice(
+        runtime: &'runtime Runtime,
+        binary: &'static mut [u8],
+        name: &str,
+    ) -> Result<Self, RuntimeError> {
+        Self::from_content(
+            runtime,
+            Content::Borrowed(binary),
+            name,
+        )
+    }
+
     /// compile a module int the given buffer,
     ///
     /// # Error
     ///
     /// If the file does not exist or the file cannot be read, an `RuntimeError::WasmFileFSError` will be returned.
     /// If the wasm file is not a valid wasm file, an `RuntimeError::CompilationError` will be returned.
-    pub fn from_vec(
+    fn from_content(
         _runtime: &'runtime Runtime,
-        mut content: Vec<u8>,
+        mut content: Content,
         name: &str,
     ) -> Result<Self, RuntimeError> {
         let mut error_buf: [c_char; DEFAULT_ERROR_BUF_SIZE] = [0; DEFAULT_ERROR_BUF_SIZE];
         let module = unsafe {
             wasm_runtime_load(
-                content.as_mut_ptr(),
-                content.len() as u32,
+                content.as_mut().as_mut_ptr(),
+                content.as_mut().len() as u32,
                 error_buf.as_mut_ptr(),
                 error_buf.len() as u32,
             )
