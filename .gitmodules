@@ -1,4 +1,4 @@
 [submodule "crates/wamr-sys/wasm-micro-runtime"]
 	path = crates/wamr-sys/wasm-micro-runtime
-	url = https://github.com/doinkythederp/wasm-micro-runtime
+	url = https://github.com/amarcolini/wasm-micro-runtime
 	branch = feat/vexos-target
