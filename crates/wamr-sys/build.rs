@@ -124,7 +124,7 @@ fn setup_config(
 
     let mut cfg = Config::new(wamr_root);
     cfg.define("WAMR_BUILD_AOT", "1")
-        .define("WAMR_BUILD_INTERP", "0")
+        .define("WAMR_BUILD_INTERP", "1")
         .define("WAMR_BUILD_FAST_INTERP", "0")
         .define("WAMR_BUILD_JIT", &enable_llvm_jit)
         .define("WAMR_BUILD_BULK_MEMORY", "1")
